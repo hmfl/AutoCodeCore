@@ -1,0 +1,46 @@
+<#@ include file="PetaPoco.Core.ttinclude" #>
+<#
+	// 设置
+    ConnectionStringName = "mysql";			// 数据库类型 根据app.config 配置的connectionStrings name
+	ModularName = "BaseProduct";//模块名称
+    Namespace = "ZYL.Core.Model.BaseProduct";  // 命名空间-公用模块
+	IncludePrefix = new string[] { "RemoteApiRequestRecord" };// 需生成实体类的数据表数组，平时修改此处生成对应的实体类
+	RepositoryInterfaceName ="ZYL.Core.Interface.Repository.BaseProduct";//仓储接口命名空间-公用模块
+	RepositoryName = "ZYL.Core.Repository.BaseProduct"; //仓储命名空间-公用模块
+
+	ServiceInterfaceName ="ZYL.Core.Interface.BaseProduct";//服务接口命名空间-业务模块
+	ServiceName = "ZYL.Core.Service.BaseProduct";//服务实现命名空间-业务模块
+	
+
+
+
+    ExcludePrefix = new string[] {}; // 排除的表，暂时无效
+	ClassPrefix = "";
+	ClassSuffix = "";
+	//RepoName = "";
+    //GenerateOperations = true;
+	//GeneratePocos = true;
+	//GenerateCommon = true;
+	//TrackModifiedColumns = false;
+	//ExplicitColumns = true;
+
+    // 加载表
+	var tables = LoadTables();
+
+
+/*
+	// Tweak Schema
+	tables["tablename"].Ignore = true;							// To ignore a table
+	tables["tablename"].ClassName = "newname";					// To change the class name of a table
+	tables["tablename"]["columnname"].Ignore = true;			// To ignore a column
+	tables["tablename"]["columnname"].PropertyName="newname";	// To change the property name of a column
+	tables["tablename"]["columnname"].PropertyType="bool";		// To change the property type of a column
+*/
+
+	// Generate output
+	if (tables.Count>0)
+	{
+#>
+<#@ include file="Model.ttinclude" #>
+
+<# } #>

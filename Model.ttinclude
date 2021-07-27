@@ -1,0 +1,379 @@
+<#@ include file="Manager.ttinclude" #>
+<# var manager=new Manager(Host, GenerationEnvironment, true) { OutputPath = Path.GetDirectoryName(Host.TemplateFile) +  @"\Model\"};
+    foreach(Table tbl in from t in tables where !t.Ignore select t)
+{ 
+manager.StartBlock(tbl.ClassName+".cs");
+
+#>
+using System;
+using PetaPoco;
+
+namespace <#=Namespace #>
+{
+    [Serializable]
+    [TableName("<#=tbl.Name#>")]
+    [PrimaryKey("<#=tbl.PK.Name#>", AutoIncrement=false)]
+    public partial class <#=tbl.ClassName#>
+    {
+    <#
+    foreach(Column col in from c in tbl.Columns where !c.Ignore select c)
+    {
+    #>
+
+        /// <summary>
+        /// <#=col.Remark.Replace("\r\n"," ")#>
+        /// </summary>
+        public <#=col.PropertyType #><#=CheckNullable(col)#> <#=col.PropertyName #> { get; set; }
+    <# 
+    }
+    #>
+    }
+}
+<#manager.EndBlock();#>
+
+<# 
+   manager.StartBlock("I"+tbl.ClassName+"Repository.cs");
+#>
+using System;
+using <#=Namespace #>;
+using XmSoft.NetCore.DBContext;
+
+namespace <#=RepositoryInterfaceName#>
+{
+    public interface  I<#=tbl.ClassName#>Repository :IDefaultRepository<<#=tbl.ClassName#>>
+    {
+        
+    }
+}
+<#manager.EndBlock();#>
+
+<# 
+	manager.StartBlock(tbl.ClassName+"Repository.cs");
+#>
+using System;
+using <#=Namespace #>;
+using XmSoft.NetCore.DBContext;
+using <#=RepositoryInterfaceName#>;
+
+namespace <#=RepositoryName #>
+{
+    public partial class <#=tbl.ClassName#>Repository :DefaultRepository<<#=tbl.ClassName#>>,I<#=tbl.ClassName#>Repository
+    {
+        public <#=tbl.ClassName#>Repository(DbContext Context) : base(Context)
+        {
+
+        }
+    }
+}
+<#manager.EndBlock();#>
+
+
+<# 
+	manager.StartBlock("I"+tbl.ClassName+"Service.cs");
+#>
+using PetaPoco;
+using System;
+using <#=Namespace #>;
+using ZYL.Core.<#=ModularName#>.ViewModel.Request;
+
+namespace <#=ServiceInterfaceName#>.Service
+{
+    public interface I<#=tbl.ClassName#>Service
+    {
+        
+        /// <summary>
+        /// 新增
+        /// </summary>
+        (object Id, string Msg) Create(<#=tbl.ClassName#> model);
+        
+        /// <summary>
+        /// 修改
+        /// </summary>
+        (bool Success, string Msg) Update(<#=tbl.ClassName#> model);
+
+        /// <summary>
+        /// 逻辑删除
+        /// </summary>
+        (bool Success, string Msg) Delete(<#=tbl.ClassName#> model);
+
+        /// <summary>
+        /// 获取详情
+        /// </summary>
+        /// <param name="Id">主键记录Id</param>
+        /// <returns></returns>
+        <#=tbl.ClassName#> Detail(Guid Id);
+
+        /// <summary>
+        /// 获取列表分页
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        Page<<#=tbl.ClassName#>> GetList(PageRequest request);
+
+    }
+}
+<#manager.EndBlock();#>
+
+
+<# 
+	manager.StartBlock(tbl.ClassName+"Service.cs");
+#>
+using PetaPoco;
+using XmSoft.NetCore.DBContext;
+using System;
+using <#=Namespace #>;
+using ZYL.Core.<#=ModularName#>.ViewModel.Request;
+using <#=ServiceInterfaceName#>.Service;
+using <#=RepositoryInterfaceName#>;
+
+namespace <#=ServiceName #>
+{
+    public class <#=tbl.ClassName#>Service :I<#=tbl.ClassName#>Service
+    {
+        private I<#=tbl.ClassName#>Repository repository;
+        public <#=tbl.ClassName#>Service(I<#=tbl.ClassName#>Repository _repository)
+        {
+            repository = _repository;
+        }  
+
+        #region 新增
+        /// <summary>
+        /// 新增
+        /// </summary>
+        public (object Id, string Msg) Create(<#=tbl.ClassName#> model)
+        {
+            model.Id = Guid.NewGuid();
+            model.CreateTime = DateTime.Now;
+            model.IsDel = 0;
+            var result = repository.Create(model);
+            if (result != null)
+            {
+                #region 操作日志
+                //LoggingHelper.Write(LogEvent.EventType.PresellProduct, "商品Id:"+model.ProductId.ToString(), LogEvent.AddPresellProduct);
+                #endregion
+            }
+            return (result, string.Empty);
+        }
+        #endregion
+
+        #region 修改
+        /// <summary>
+        /// 修改
+        /// </summary>
+        public (bool Success, string Msg) Update(<#=tbl.ClassName#> model)
+        {
+            <#=tbl.ClassName#> oldmodel = repository.First(q => q.Id == model.Id);//先查询库中待修改记录对象
+            if (oldmodel == null)
+                return (false, "待修改数据不存在");
+
+            var result = repository.Update(model);
+            if (result)
+            {
+                #region 操作日志
+                //LoggingHelper.Write(LogEvent.EventType.BusinessVersion, "版本名称:" + model.Version, LogEvent.UpdateBusinessVersion);
+                #endregion
+            }
+            return (result, string.Empty);
+        }
+        #endregion
+
+        #region 逻辑删除
+        /// <summary>
+        /// 逻辑删除
+        /// </summary>
+        public (bool Success, string Msg) Delete(<#=tbl.ClassName#> model)
+        {
+            <#=tbl.ClassName#> oldmodel = repository.First(q => q.Id == model.Id);//先查询库中是否有记录对象
+            if (oldmodel == null)
+                return (false, "待删除数据不存在");
+            var result = repository.Update(model, q => new { q.IsDel, q.UpdateId, q.UpdateTime });
+            if (result)
+            {
+                #region 操作日志
+                //LoggingHelper.Write(LogEvent.EventType.BusinessVersion, "版本名称:" + oldmodel.Version, LogEvent.DeleteBusinessVersion);
+                #endregion
+            }
+            return (result, string.Empty);
+        }
+        #endregion
+
+        #region 获取详情
+        /// <summary>
+        /// 获取详情
+        /// </summary>
+        /// <param name="Id">主键记录Id</param>
+        /// <returns></returns>
+        public <#=tbl.ClassName#> Detail(Guid Id)
+        {
+            //无数据时会返回null
+            return repository.First(q => q.Id == Id);
+        }
+        #endregion
+
+        #region 获取列表分页
+        /// <summary>
+        /// 获取列表分页
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        public Page<<#=tbl.ClassName#>> GetList(PageRequest request)
+        {
+            var sql = SqlCore.Builder;
+            //返回全部使用(),返回部分字段使用如:（q => new { q.Id, q.ShopId, q.CreateTime）
+            sql.Select<<#=tbl.ClassName#>>();
+            sql.From<<#=tbl.ClassName#>>();
+            //查询条件
+            sql.Where<<#=tbl.ClassName#>>(q => q.ShopId == Guid.Parse(request.ShopId) && q.IsDel == 0);
+            //排序-根据实际情况修改
+            sql.OrderByDesc<<#=tbl.ClassName#>>(q => q.CreateTime);
+            sql.OrderByDesc<<#=tbl.ClassName#>>(q => q.Id);
+            //执行分页查询
+            var result = repository.Page<<#=tbl.ClassName#>>(sql, request.PageIndex, request.PageSize);
+            return result;
+        }
+        #endregion      
+
+    }
+}
+<#manager.EndBlock();#>
+
+<# 
+	manager.StartBlock(tbl.ClassName+"Controller.cs");
+#>
+using FluentValidation;
+using log4net;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using System;
+using ZYL.Core.UtilityLibrary;
+using <#=Namespace#>;
+using <#=ServiceInterfaceName#>.Service;
+
+namespace <#=Namespace#>.Api.Controllers
+{
+    public class <#=tbl.ClassName#>Controller : BaseCotroller
+    {
+        //定义常用方法
+
+        #region 新增
+        /// <summary>
+        /// 新增
+        /// </summary>
+        /// <param name="Body"></param>
+        /// <returns></returns>
+        public IActionResult Add(string Body)
+        {
+            var request = JsonConvert.DeserializeObject<<#=tbl.ClassName#>>(Body);
+            var result = <#=tbl.ClassName#>Validator.Validate(request);
+            if (result.Errors.Count > 0)
+            {
+                return JsonFail(result.Errors[0].ErrorMessage);
+            }
+            request.CreateId = OperaId;
+            var response = i<#=tbl.ClassName#>Service.Create(request);
+            return response.Id == null ? JsonFail(response.Msg) : JsonSuccess(response.Id);
+        }
+        #endregion 
+
+        #region 修改
+        /// <summary>
+        /// 修改
+        /// </summary>
+        /// <param name="Body"></param>
+        /// <returns></returns>
+        public IActionResult Update(string Body)
+        {
+            var request = JsonConvert.DeserializeObject<<#=tbl.ClassName#>>(Body);
+            var result = <#=tbl.ClassName#>Validator.Validate(request, ruleSet: "Update");
+            if (result.Errors.Count > 0)
+            {
+                return JsonFail(result.Errors[0].ErrorMessage);
+            }
+            request.UpdateId = OperaId;
+            request.UpdateTime = DateTime.Now;
+            //--强制重置空一些不能修改的字段，防止前端传入
+            request.CreateId = null;
+            request.CreateTime = null;
+            request.IsDel = null;
+            request.ShopId = null;
+            //----
+            var response = i<#=tbl.ClassName#>Service.Update(request);
+            return !response.Success ? JsonFail(response.Msg) : JsonSuccess(true);
+        }
+        #endregion
+
+        #region 删除
+        /// <summary>
+        /// 删除
+        /// </summary>
+        /// <param name="Body"></param>
+        /// <returns></returns>
+        public IActionResult Delete(string Body)
+        {
+            var request = JsonConvert.DeserializeObject<SingleIdRequest>(Body);
+            var result = singleIdRequestValidator.Validate(request);
+            if (result.Errors.Count > 0)
+            {
+                return JsonFail(result.Errors[0].ErrorMessage);
+            }
+            <#=tbl.ClassName#> model = new <#=tbl.ClassName#>();
+            model.Id = Guid.Parse(request.Id);
+            model.UpdateId = OperaId;
+            model.UpdateTime = DateTime.Now;
+            model.IsDel = 1;
+
+            var response = i<#=tbl.ClassName#>Service.Delete(model);
+            return !response.Success ? JsonFail(response.Msg) : JsonSuccess(true);
+        }
+        #endregion        
+
+        #region 获取详情
+        /// <summary>
+        /// 获取详情
+        /// </summary>
+        /// <param name="Body"></param>
+        /// <returns></returns>
+        public IActionResult GetDetail(string Body)
+        {
+            var request = JsonConvert.DeserializeObject<SingleIdRequest>(Body);
+            var result = singleIdRequestValidator.Validate(request);
+            if (result.Errors.Count > 0)
+            {
+                return JsonFail(result.Errors[0].ErrorMessage);
+            }
+
+            var response = i<#=tbl.ClassName#>Service.Detail(Guid.Parse(request.Id));
+            return response == null ? JsonFail(Constants.NotFind) : JsonSuccess(response);
+        }
+        #endregion
+
+        #region 获取列表
+        /// <summary>
+        /// 获取列表-分页
+        /// </summary>
+        /// <param name="Body"></param>
+        /// <returns></returns>
+        public IActionResult GetList(string Body)
+        {
+            var request = JsonConvert.DeserializeObject<PageRequest>(Body);
+            var result = shopValidator.Validate(request);
+            if (result.Errors.Count > 0)
+            {
+                return JsonFail(result.Errors[0].ErrorMessage);
+            }
+            var response = i<#=tbl.ClassName#>Service.GetList(request);
+            return response == null ? JsonException() : JsonSuccess(response);
+        }
+        #endregion        
+
+    }
+}
+<#manager.EndBlock();#>
+
+
+
+
+<# } #>
+<#manager.Process(true); #>
